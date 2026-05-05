@@ -1,0 +1,23 @@
+# VCS
+.git
+.gitignore
+
+# IDE
+.idea
+*.iml
+
+# Build artifacts
+**/target
+**/build
+
+# Logs
+*.log
+logs
+
+# Environment files
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
