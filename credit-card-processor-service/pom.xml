@@ -7,7 +7,7 @@
     <version>${revision}</version>
 
     <parent>
-        <groupId>by.javaguru</groupId>
+        <groupId>io.github.levasey.saga</groupId>
         <artifactId>saga-pattern-spring-boot-demo</artifactId>
         <version>${revision}</version>
     </parent>
@@ -22,7 +22,7 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
         <dependency>
-            <groupId>by.javaguru</groupId>
+            <groupId>io.github.levasey.saga</groupId>
             <artifactId>core</artifactId>
             <version>1.0.0</version>
             <scope>compile</scope>
