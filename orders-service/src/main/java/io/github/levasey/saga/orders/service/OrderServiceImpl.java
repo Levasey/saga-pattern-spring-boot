@@ -1,13 +1,17 @@
 package io.github.levasey.saga.orders.service;
 
 import io.github.levasey.saga.core.dto.Order;
-import io.github.levasey.saga.core.event.OrderCreatedEvent;
+import io.github.levasey.saga.core.dto.event.OrderApprovedEvent;
+import io.github.levasey.saga.core.dto.event.OrderCreatedEvent;
 import io.github.levasey.saga.core.types.OrderStatus;
 import io.github.levasey.saga.orders.dao.jpa.entity.OrderEntity;
 import io.github.levasey.saga.orders.dao.jpa.repository.OrderRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.util.Assert;
+
+import java.util.UUID;
 
 @Service
 public class OrderServiceImpl implements OrderService {
@@ -47,5 +51,23 @@ public class OrderServiceImpl implements OrderService {
                 entity.getProductId(),
                 entity.getProductQuantity(),
                 entity.getStatus());
+    }
+
+    @Override
+    public void approvedOrder(UUID orderId) {
+        OrderEntity orderEntity = orderRepository.findById(orderId).orElse(null);
+        Assert.notNull(orderEntity, "No such is found with id" + orderId + " in the database table");
+        orderEntity.setStatus(OrderStatus.APPROVED);
+        orderRepository.save(orderEntity);
+        OrderApprovedEvent orderApprovedEvent = new OrderApprovedEvent(orderId);
+        kafkaTemplate.send(ordersEventTopicName, orderApprovedEvent);
+    }
+
+    @Override
+    public void rejectOrder(UUID orderId) {
+        OrderEntity orderEntity = orderRepository.findById(orderId).orElse(null);
+        Assert.notNull(orderEntity, "No such is found with id" + orderId + " in the database table");
+        orderEntity.setStatus(OrderStatus.REJECTED);
+        orderRepository.save(orderEntity);
     }
 }

@@ -1,4 +1,4 @@
-package io.github.levasey.saga.core.event;
+package io.github.levasey.saga.core.dto.event;
 
 import java.util.UUID;
 
