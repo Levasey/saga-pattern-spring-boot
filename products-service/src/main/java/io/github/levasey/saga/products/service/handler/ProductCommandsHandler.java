@@ -3,6 +3,7 @@ package io.github.levasey.saga.products.service.handler;
 import io.github.levasey.saga.core.dto.Product;
 import io.github.levasey.saga.core.dto.command.CancelProductReservationCommand;
 import io.github.levasey.saga.core.dto.command.ReserveProductCommand;
+import io.github.levasey.saga.core.dto.event.ProductReservationCancelledEvent;
 import io.github.levasey.saga.core.dto.event.ProductReservationFailedEvent;
 import io.github.levasey.saga.core.dto.event.ProductReservedEvent;
 import io.github.levasey.saga.products.service.ProductService;
@@ -48,7 +49,6 @@ public class ProductCommandsHandler {
 
             kafkaTemplate.send(productEventsTopicName, productReservedEvent);
 
-
         } catch (Exception e) {
             logger.error(e.getLocalizedMessage(), e);
             ProductReservationFailedEvent productReservationFailedEvent = new ProductReservationFailedEvent(
@@ -66,5 +66,10 @@ public class ProductCommandsHandler {
     public void handleCommand(@Payload CancelProductReservationCommand command) {
         Product productToCancel = new Product(command.getProductId(), command.getProductQuantity());
         productService.cancelReservation(productToCancel, command.getOrderId());
+
+        ProductReservationCancelledEvent productReservationCancelledEvent = new ProductReservationCancelledEvent(
+                command.getOrderId(),
+                command.getProductId());
+        kafkaTemplate.send(productEventsTopicName, productReservationCancelledEvent);
     }
 }

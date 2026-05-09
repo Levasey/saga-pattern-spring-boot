@@ -47,10 +47,10 @@ public class PaymentsCommandsHandler {
             kafkaTemplate.send(paymentEventsTopicName, paymentProcessedEvent);
         } catch (CreditCardProcessorUnavailableException e) {
             logger.error(e.getLocalizedMessage(), e);
-            PaymentFailedEvent paymentFaildEvent = new PaymentFailedEvent(command.getOrderId(),
+            PaymentFailedEvent paymentFailedEvent = new PaymentFailedEvent(command.getOrderId(),
                     command.getProductId(),
                     command.getProductQuantity());
-            kafkaTemplate.send(paymentEventsTopicName, paymentFaildEvent);
+            kafkaTemplate.send(paymentEventsTopicName, paymentFailedEvent);
         }
     }
 }

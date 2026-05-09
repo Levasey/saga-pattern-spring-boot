@@ -2,6 +2,64 @@
 
 Demonstration of SAGA Orchestration Design Pattern using Spring Boot and Kafka
 
+## How the saga works
+
+Orchestration lives in **orders-service**: `OrderSaga` listens to domain events from `orders-events`, `products-events`, and `payments-events`, then publishes commands to `products-commands`, `payments-commands`, and `orders-commands`. Each participant service reacts to its command topic and publishes outcomes as events.
+
+Happy path: order created → product reserved → payment processed → order approved.
+
+If payment fails, the saga sends a compensating command to cancel the product reservation, then rejects the order.
+
+```mermaid
+sequenceDiagram
+    participant O as orders-service
+    participant P as products-service
+    participant Pay as payments-service
+    participant CCP as credit-card-processor
+
+    O->>P: ReserveProductCommand
+    P-->>O: ProductReservedEvent
+    O->>Pay: ProcessPaymentCommand
+    Pay->>CCP: HTTP process
+    CCP-->>Pay: result
+    Pay-->>O: PaymentProcessedEvent
+    O->>O: ApproveOrderCommand
+    O-->>O: OrderApprovedEvent / history
+```
+
+Compensation path (payment failure):
+
+```mermaid
+sequenceDiagram
+    participant O as orders-service
+    participant P as products-service
+    participant Pay as payments-service
+
+    Pay-->>O: PaymentFailedEvent
+    O->>P: CancelProductReservationCommand
+    P-->>O: ProductReservationCancelledEvent
+    O->>O: RejectOrderCommand
+```
+
+### Kafka topics
+
+Topics are created at startup via Spring (`NewTopic` beans). Names default to:
+
+| Topic | Typical publisher |
+|-------|-------------------|
+| `orders-events` | orders-service |
+| `orders-commands` | orders-service (saga) |
+| `products-commands` | orders-service (saga) |
+| `products-events` | products-service |
+| `payments-commands` | orders-service (saga) |
+| `payments-events` | payments-service |
+
+The Docker Compose stack runs **three** Kafka brokers so topics can use replication factor `3` (see `KafkaConfig` in each service).
+
+Bootstrap servers (all services): `localhost:9092`, `localhost:9094`, `localhost:9096`.
+
+For Kafka CLI tips (topics, consumer groups, KRaft), see [docs/kafka-linux-kraft.md](docs/kafka-linux-kraft.md).
+
 ## Project Overview
 
 This repository contains a multi-module Spring Boot demo that models an order flow across several services.
@@ -36,9 +94,11 @@ Start PostgreSQL and Kafka cluster:
 docker compose up -d
 ```
 
+Wait until Postgres is healthy and all Kafka brokers are up before starting the applications.
+
 This starts:
-- PostgreSQL on `localhost:5434`
-- Kafka brokers exposed on `localhost:9092`, `localhost:9094`, `localhost:9096`
+- PostgreSQL on `localhost:5434` (default user/password: `saga` / `saga`)
+- A three-broker Kafka cluster (KRaft) exposed on `localhost:9092`, `localhost:9094`, `localhost:9096`
 
 Databases are initialized from `docker/postgres/init-databases.sql`:
 - `orders`
@@ -55,13 +115,19 @@ mvn clean install
 
 ## Run Services
 
-Run each service in a separate terminal:
+Run each service in a separate terminal. There is no strict order, but **credit-card-processor-service** should be up before **payments-service** handles payments, and all Kafka-backed services expect the Docker stack running.
+
+Typical order:
+
+1. `credit-card-processor-service` (external dependency for payments)
+2. `products-service` and `payments-service` (create event topics and handle commands)
+3. `orders-service` (REST API and saga orchestration)
 
 ```bash
-mvn -pl orders-service spring-boot:run
+mvn -pl credit-card-processor-service spring-boot:run
 mvn -pl products-service spring-boot:run
 mvn -pl payments-service spring-boot:run
-mvn -pl credit-card-processor-service spring-boot:run
+mvn -pl orders-service spring-boot:run
 ```
 
 Default ports:
@@ -71,6 +137,12 @@ Default ports:
 - `credit-card-processor-service`: `8084`
 
 ## API Quick Check
+
+List products (optional, to copy a `productId`):
+
+```bash
+curl http://localhost:8081/products
+```
 
 Create product:
 
@@ -84,7 +156,7 @@ curl -X POST http://localhost:8081/products \
   }'
 ```
 
-Create order:
+Create order (returns `202 Accepted` with order details including `orderId`):
 
 ```bash
 curl -X POST http://localhost:8080/orders \
@@ -96,11 +168,13 @@ curl -X POST http://localhost:8080/orders \
   }'
 ```
 
-Get order history:
+Get order history (status transitions as the saga runs):
 
 ```bash
 curl http://localhost:8080/orders/PUT_ORDER_ID_HERE/history
 ```
+
+After a successful flow you should see entries such as `CREATED` and `APPROVED`; if payment fails after a reservation, expect `REJECTED` after compensation.
 
 ## Configuration Notes
 
@@ -112,3 +186,4 @@ curl http://localhost:8080/orders/PUT_ORDER_ID_HERE/history
   - `POSTGRES_USER`
   - `POSTGRES_PASSWORD`
 - `payments-service` uses `remote.ccp.url` (default `http://localhost:8084`) to call credit card processor.
+- Kafka bootstrap servers can be overridden with the standard Spring Boot property, for example `SPRING_KAFKA_BOOTSTRAP_SERVERS=host:9092` (comma-separated list).

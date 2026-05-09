@@ -1,6 +1,7 @@
 package io.github.levasey.saga.orders.service.handler;
 
 import io.github.levasey.saga.core.dto.command.ApproveOrderCommand;
+import io.github.levasey.saga.core.dto.command.RejectOrderCommand;
 import io.github.levasey.saga.orders.service.OrderService;
 import org.springframework.kafka.annotation.KafkaHandler;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -19,5 +20,10 @@ public class OrdersCommandsHandler {
     @KafkaHandler
     public void handleCommand(@Payload ApproveOrderCommand approveOrderCommand) {
         orderService.approvedOrder(approveOrderCommand.getOrderId());
+    }
+
+    @KafkaHandler
+    public void handleCommand(@Payload RejectOrderCommand rejectOrderCommand) {
+        orderService.rejectOrder(rejectOrderCommand.getOrderId());
     }
 }
