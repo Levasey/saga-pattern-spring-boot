@@ -1,6 +1,20 @@
 # saga-pattern-spring-boot
 
-Demonstration of SAGA Orchestration Design Pattern using Spring Boot and Kafka
+Demonstration of the **SAGA orchestration** pattern with Spring Boot and Apache Kafka: one service coordinates long-running business transactions by issuing commands and reacting to events from other bounded contexts.
+
+## Contents
+
+- [How the saga works](#how-the-saga-works)
+- [Kafka topics](#kafka-topics)
+- [Project overview](#project-overview)
+- [Tech stack](#tech-stack)
+- [Prerequisites](#prerequisites)
+- [Infrastructure](#infrastructure)
+- [Build](#build)
+- [Run services](#run-services)
+- [API quick check](#api-quick-check)
+- [Configuration notes](#configuration-notes)
+- [Troubleshooting](#troubleshooting)
 
 ## How the saga works
 
@@ -41,6 +55,19 @@ sequenceDiagram
     O->>O: RejectOrderCommand
 ```
 
+If the credit card processor is unreachable from **payments-service**, `CreditCardProcessorUnavailableException` maps to `PaymentFailedEvent`, so the same compensation path runs.
+
+### Where the code lives
+
+| Role | Module | Main types |
+|------|--------|------------|
+| Saga orchestrator | `orders-service` | `io.github.levasey.saga.orders.saga.OrderSaga` |
+| Order REST API and persistence | `orders-service` | `OrdersController`, `OrderServiceImpl`, `OrdersCommandsHandler` |
+| Product reservations | `products-service` | `ProductCommandsHandler`, `ProductServiceImpl` |
+| Payments and CCP client | `payments-service` | `PaymentsCommandsHandler`, `PaymentServiceImpl`, `CreditCardProcessorRemoteServiceImpl` |
+| Mock external gateway | `credit-card-processor-service` | `CreditCardProcessorController` (`POST /ccp/process`) |
+| Shared contracts | `core` | Commands, events, DTOs under `io.github.levasey.saga.core` |
+
 ### Kafka topics
 
 Topics are created at startup via Spring (`NewTopic` beans). Names default to:
@@ -74,11 +101,11 @@ Modules:
 ## Tech Stack
 
 - Java 17
-- Spring Boot 3.2.x
+- Spring Boot 3.2.5
 - Maven (multi-module build)
-- PostgreSQL
-- Apache Kafka
-- Docker Compose (for local infra)
+- PostgreSQL 16 (via Docker)
+- Apache Kafka 4.x (KRaft, Bitnami images in Compose)
+- Docker Compose (local infra)
 
 ## Prerequisites
 
@@ -97,8 +124,21 @@ docker compose up -d
 Wait until Postgres is healthy and all Kafka brokers are up before starting the applications.
 
 This starts:
-- PostgreSQL on `localhost:5434` (default user/password: `saga` / `saga`)
-- A three-broker Kafka cluster (KRaft) exposed on `localhost:9092`, `localhost:9094`, `localhost:9096`
+
+- **PostgreSQL** (`postgres:16-alpine`) on `localhost:5434` (default user/password: `saga` / `saga`)
+- **Kafka** — three brokers (`bitnamilegacy/kafka:4.0.0-debian-12-r10`, KRaft) exposed on `localhost:9092`, `localhost:9094`, `localhost:9096`
+
+Stop containers (data volumes are kept):
+
+```bash
+docker compose down
+```
+
+Remove volumes as well for a clean reset (drops broker and Postgres data):
+
+```bash
+docker compose down -v
+```
 
 Databases are initialized from `docker/postgres/init-databases.sql`:
 - `orders`
@@ -187,3 +227,12 @@ After a successful flow you should see entries such as `CREATED` and `APPROVED`;
   - `POSTGRES_PASSWORD`
 - `payments-service` uses `remote.ccp.url` (default `http://localhost:8084`) to call credit card processor.
 - Kafka bootstrap servers can be overridden with the standard Spring Boot property, for example `SPRING_KAFKA_BOOTSTRAP_SERVERS=host:9092` (comma-separated list).
+
+## Troubleshooting
+
+- **Services fail on startup with Kafka or DB errors** — wait until `docker compose ps` shows Postgres healthy and all three Kafka containers running; cold starts can take a minute.
+- **`Connection refused` to Postgres** — confirm port `5434` matches `application.properties` in each service (defaults align with Compose).
+- **Payments stall or saga never completes** — start **credit-card-processor-service** before exercising payments; **payments-service** must reach `http://localhost:8084/ccp/process`.
+- **Topic or replication errors** — this demo expects replication factor `3`; run the full three-broker Compose stack, not a single-broker Kafka.
+
+For inspecting topics, consumer groups, and KRaft basics on Linux, see [docs/kafka-linux-kraft.md](docs/kafka-linux-kraft.md).

@@ -15,6 +15,9 @@ public class ProductCreationRequest {
     @Positive
     private Integer quantity;
 
+    public ProductCreationRequest() {
+    }
+
     public ProductCreationRequest(String name, BigDecimal price, Integer quantity) {
         this.name = name;
         this.price = price;
