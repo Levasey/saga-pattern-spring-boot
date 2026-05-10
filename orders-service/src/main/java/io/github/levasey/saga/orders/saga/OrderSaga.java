@@ -49,7 +49,7 @@ public class OrderSaga {
                 event.getOrderId()
         );
 
-        kafkaTemplate.send(productsCommandsTopicName, command);
+        kafkaTemplate.send(productsCommandsTopicName, event.getOrderId().toString(), command);
 
         orderHistoryService.add(event.getOrderId(), OrderStatus.CREATED);
     }
@@ -63,13 +63,13 @@ public class OrderSaga {
                 event.getProductQuantity()
         );
 
-        kafkaTemplate.send(paymentsCommandsTopicName, command);
+        kafkaTemplate.send(paymentsCommandsTopicName, event.getOrderId().toString(), command);
     }
 
     @KafkaHandler
     public void handleEvent(@Payload PaymentProcessedEvent event) {
         ApproveOrderCommand approveOrderCommand = new ApproveOrderCommand(event.getOrderId());
-        kafkaTemplate.send(ordersCommandsTopicName, approveOrderCommand);
+        kafkaTemplate.send(ordersCommandsTopicName, event.getOrderId().toString(), approveOrderCommand);
     }
 
     @KafkaHandler
@@ -78,7 +78,7 @@ public class OrderSaga {
                 event.getProductId(),
                 event.getProductQuantity(),
                 event.getOrderId());
-        kafkaTemplate.send(productsCommandsTopicName, rollback);
+        kafkaTemplate.send(productsCommandsTopicName, event.getOrderId().toString(), rollback);
     }
 
     @KafkaHandler
@@ -89,7 +89,7 @@ public class OrderSaga {
     @KafkaHandler
     public void handleEvent(@Payload ProductReservationCancelledEvent event) {
         RejectOrderCommand rejectOrderCommand = new RejectOrderCommand(event.getOrderId());
-        kafkaTemplate.send(ordersCommandsTopicName, rejectOrderCommand);
+        kafkaTemplate.send(ordersCommandsTopicName, event.getOrderId().toString(), rejectOrderCommand);
 
         orderHistoryService.add(event.getOrderId(), OrderStatus.REJECTED);
     }

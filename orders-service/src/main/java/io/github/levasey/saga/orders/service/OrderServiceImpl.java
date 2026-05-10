@@ -43,7 +43,7 @@ public class OrderServiceImpl implements OrderService {
                 entity.getProductQuantity()
         );
 
-        kafkaTemplate.send(ordersEventTopicName, placedOrder);
+        kafkaTemplate.send(ordersEventTopicName, entity.getId().toString(), placedOrder);
 
         return new Order(
                 entity.getId(),
@@ -60,7 +60,7 @@ public class OrderServiceImpl implements OrderService {
         orderEntity.setStatus(OrderStatus.APPROVED);
         orderRepository.save(orderEntity);
         OrderApprovedEvent orderApprovedEvent = new OrderApprovedEvent(orderId);
-        kafkaTemplate.send(ordersEventTopicName, orderApprovedEvent);
+        kafkaTemplate.send(ordersEventTopicName, orderId.toString(), orderApprovedEvent);
     }
 
     @Override

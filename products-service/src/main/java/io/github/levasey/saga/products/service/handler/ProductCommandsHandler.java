@@ -47,7 +47,7 @@ public class ProductCommandsHandler {
                     command.getProductQuantity()
             );
 
-            kafkaTemplate.send(productEventsTopicName, productReservedEvent);
+            kafkaTemplate.send(productEventsTopicName, command.getOrderId().toString(), productReservedEvent);
 
         } catch (Exception e) {
             logger.error(e.getLocalizedMessage(), e);
@@ -57,7 +57,7 @@ public class ProductCommandsHandler {
                     command.getProductQuantity()
             );
 
-            kafkaTemplate.send(productEventsTopicName, productReservationFailedEvent);
+            kafkaTemplate.send(productEventsTopicName, command.getOrderId().toString(), productReservationFailedEvent);
 
         }
     }
@@ -70,6 +70,6 @@ public class ProductCommandsHandler {
         ProductReservationCancelledEvent productReservationCancelledEvent = new ProductReservationCancelledEvent(
                 command.getOrderId(),
                 command.getProductId());
-        kafkaTemplate.send(productEventsTopicName, productReservationCancelledEvent);
+        kafkaTemplate.send(productEventsTopicName, command.getOrderId().toString(), productReservationCancelledEvent);
     }
 }
