@@ -4,6 +4,7 @@ import io.github.levasey.saga.core.dto.Payment;
 import io.github.levasey.saga.core.dto.command.ProcessPaymentCommand;
 import io.github.levasey.saga.core.dto.event.PaymentFailedEvent;
 import io.github.levasey.saga.core.dto.event.PaymentProcessedEvent;
+import io.github.levasey.saga.core.exceptions.CreditCardPaymentDeclinedException;
 import io.github.levasey.saga.core.exceptions.CreditCardProcessorUnavailableException;
 import io.github.levasey.saga.payments.service.PaymentService;
 import org.slf4j.Logger;
@@ -42,15 +43,24 @@ public class PaymentsCommandsHandler {
 
             Payment processedPayment = service.process(payment);
 
-            PaymentProcessedEvent paymentProcessedEvent = new PaymentProcessedEvent(processedPayment.getOrderId(),
+            PaymentProcessedEvent paymentProcessedEvent = new PaymentProcessedEvent(
+                    processedPayment.getOrderId(),
                     processedPayment.getId());
             kafkaTemplate.send(paymentEventsTopicName, command.getOrderId().toString(), paymentProcessedEvent);
-        } catch (CreditCardProcessorUnavailableException e) {
+        } catch (CreditCardProcessorUnavailableException | CreditCardPaymentDeclinedException e) {
+            logger.warn(e.getLocalizedMessage());
+            publishPaymentFailed(command);
+        } catch (Exception e) {
             logger.error(e.getLocalizedMessage(), e);
-            PaymentFailedEvent paymentFailedEvent = new PaymentFailedEvent(command.getOrderId(),
-                    command.getProductId(),
-                    command.getProductQuantity());
-            kafkaTemplate.send(paymentEventsTopicName, command.getOrderId().toString(), paymentFailedEvent);
+            publishPaymentFailed(command);
         }
+    }
+
+    private void publishPaymentFailed(ProcessPaymentCommand command) {
+        PaymentFailedEvent paymentFailedEvent = new PaymentFailedEvent(
+                command.getOrderId(),
+                command.getProductId(),
+                command.getProductQuantity());
+        kafkaTemplate.send(paymentEventsTopicName, command.getOrderId().toString(), paymentFailedEvent);
     }
 }

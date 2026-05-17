@@ -11,7 +11,7 @@ public class PaymentEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
-    @Column(name = "order_id")
+    @Column(name = "order_id", unique = true)
     private UUID orderId;
     @Column(name = "product_id")
     private UUID productId;

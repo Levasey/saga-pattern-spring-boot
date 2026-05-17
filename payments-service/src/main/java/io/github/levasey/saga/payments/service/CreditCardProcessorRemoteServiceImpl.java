@@ -1,9 +1,12 @@
 package io.github.levasey.saga.payments.service;
 
 import io.github.levasey.saga.core.dto.CreditCardProcessRequest;
+import io.github.levasey.saga.core.exceptions.CreditCardPaymentDeclinedException;
 import io.github.levasey.saga.core.exceptions.CreditCardProcessorUnavailableException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
@@ -15,7 +18,6 @@ public class CreditCardProcessorRemoteServiceImpl implements CreditCardProcessor
     private final RestTemplate restTemplate;
     private final String ccpRemoteServiceUrl;
 
-
     public CreditCardProcessorRemoteServiceImpl(
             RestTemplate restTemplate,
             @Value("${remote.ccp.url}") String ccpRemoteServiceUrl
@@ -24,12 +26,16 @@ public class CreditCardProcessorRemoteServiceImpl implements CreditCardProcessor
         this.ccpRemoteServiceUrl = ccpRemoteServiceUrl;
     }
 
-
     @Override
     public void process(BigInteger cardNumber, BigDecimal paymentAmount) {
         try {
             var request = new CreditCardProcessRequest(cardNumber, paymentAmount);
-            restTemplate.postForObject(ccpRemoteServiceUrl + "/ccp/process", request, CreditCardProcessRequest.class);
+            restTemplate.postForObject(ccpRemoteServiceUrl + "/ccp/process", request, Void.class);
+        } catch (HttpClientErrorException e) {
+            if (e.getStatusCode() == HttpStatus.PAYMENT_REQUIRED) {
+                throw new CreditCardPaymentDeclinedException(e);
+            }
+            throw e;
         } catch (ResourceAccessException e) {
             throw new CreditCardProcessorUnavailableException(e);
         }

@@ -6,6 +6,7 @@ import io.github.levasey.saga.core.dto.command.ReserveProductCommand;
 import io.github.levasey.saga.core.dto.event.ProductReservationCancelledEvent;
 import io.github.levasey.saga.core.dto.event.ProductReservationFailedEvent;
 import io.github.levasey.saga.core.dto.event.ProductReservedEvent;
+import io.github.levasey.saga.core.exceptions.ProductInsufficientQuantityException;
 import io.github.levasey.saga.products.service.ProductService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +16,8 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
+
+import java.util.NoSuchElementException;
 
 @Component
 @KafkaListener(topics = "${products.commands.topic.name}")
@@ -35,7 +38,6 @@ public class ProductCommandsHandler {
 
     @KafkaHandler
     public void handleCommand(@Payload ReserveProductCommand command) {
-
         try {
             Product desiredProduct = new Product(command.getProductId(), command.getProductQuantity());
             Product reservedProduct = productService.reserve(desiredProduct, command.getOrderId());
@@ -48,28 +50,31 @@ public class ProductCommandsHandler {
             );
 
             kafkaTemplate.send(productEventsTopicName, command.getOrderId().toString(), productReservedEvent);
-
-        } catch (Exception e) {
-            logger.error(e.getLocalizedMessage(), e);
-            ProductReservationFailedEvent productReservationFailedEvent = new ProductReservationFailedEvent(
-                    command.getProductId(),
-                    command.getOrderId(),
-                    command.getProductQuantity()
-            );
-
-            kafkaTemplate.send(productEventsTopicName, command.getOrderId().toString(), productReservationFailedEvent);
-
+        } catch (ProductInsufficientQuantityException | NoSuchElementException e) {
+            logger.warn(e.getLocalizedMessage());
+            publishReservationFailed(command);
         }
     }
 
     @KafkaHandler
     public void handleCommand(@Payload CancelProductReservationCommand command) {
         Product productToCancel = new Product(command.getProductId(), command.getProductQuantity());
-        productService.cancelReservation(productToCancel, command.getOrderId());
+        if (!productService.cancelReservation(productToCancel, command.getOrderId())) {
+            return;
+        }
 
         ProductReservationCancelledEvent productReservationCancelledEvent = new ProductReservationCancelledEvent(
                 command.getOrderId(),
                 command.getProductId());
         kafkaTemplate.send(productEventsTopicName, command.getOrderId().toString(), productReservationCancelledEvent);
+    }
+
+    private void publishReservationFailed(ReserveProductCommand command) {
+        ProductReservationFailedEvent productReservationFailedEvent = new ProductReservationFailedEvent(
+                command.getProductId(),
+                command.getOrderId(),
+                command.getProductQuantity()
+        );
+        kafkaTemplate.send(productEventsTopicName, command.getOrderId().toString(), productReservationFailedEvent);
     }
 }

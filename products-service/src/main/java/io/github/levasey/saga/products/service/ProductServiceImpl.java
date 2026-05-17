@@ -3,43 +3,79 @@ package io.github.levasey.saga.products.service;
 import io.github.levasey.saga.core.dto.Product;
 import io.github.levasey.saga.core.exceptions.ProductInsufficientQuantityException;
 import io.github.levasey.saga.products.dao.jpa.entity.ProductEntity;
+import io.github.levasey.saga.products.dao.jpa.entity.ProductReservationEntity;
 import io.github.levasey.saga.products.dao.jpa.repository.ProductRepository;
-import org.springframework.beans.BeanUtils;
+import io.github.levasey.saga.products.dao.jpa.repository.ProductReservationRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
 public class ProductServiceImpl implements ProductService {
     private final ProductRepository productRepository;
+    private final ProductReservationRepository productReservationRepository;
 
-    public ProductServiceImpl(ProductRepository productRepository) {
+    public ProductServiceImpl(ProductRepository productRepository,
+                              ProductReservationRepository productReservationRepository) {
         this.productRepository = productRepository;
+        this.productReservationRepository = productReservationRepository;
     }
 
     @Override
+    @Transactional
     public Product reserve(Product desiredProduct, UUID orderId) {
-        ProductEntity productEntity = productRepository.findById(desiredProduct.getId()).orElseThrow();
-        if (desiredProduct.getQuantity() > productEntity.getQuantity()) {
+        var existingReservation = productReservationRepository.findById(orderId);
+        if (existingReservation.isPresent()) {
+            ProductReservationEntity reservation = existingReservation.get();
+            if (!reservation.isCancelled()) {
+                return toReservedProduct(reservation);
+            }
+        }
+
+        ProductEntity productEntity = productRepository.findById(desiredProduct.getId())
+                .orElseThrow(() -> new NoSuchElementException("Product not found: " + desiredProduct.getId()));
+
+        int updatedRows = productRepository.decreaseQuantityIfAvailable(
+                desiredProduct.getId(),
+                desiredProduct.getQuantity()
+        );
+        if (updatedRows == 0) {
             throw new ProductInsufficientQuantityException(productEntity.getId(), orderId);
         }
 
-        productEntity.setQuantity(productEntity.getQuantity() - desiredProduct.getQuantity());
-        productRepository.save(productEntity);
+        ProductReservationEntity reservation = new ProductReservationEntity();
+        reservation.setOrderId(orderId);
+        reservation.setProductId(desiredProduct.getId());
+        reservation.setQuantity(desiredProduct.getQuantity());
+        reservation.setPrice(productEntity.getPrice());
+        reservation.setCancelled(false);
+        productReservationRepository.save(reservation);
 
-        var reservedProduct = new Product();
-        BeanUtils.copyProperties(productEntity, reservedProduct);
-        reservedProduct.setQuantity(desiredProduct.getQuantity());
-        return reservedProduct;
+        return new Product(
+                desiredProduct.getId(),
+                productEntity.getName(),
+                productEntity.getPrice(),
+                desiredProduct.getQuantity()
+        );
     }
 
     @Override
-    public void cancelReservation(Product productToCancel, UUID orderId) {
-        ProductEntity productEntity = productRepository.findById(productToCancel.getId()).orElseThrow();
-        productEntity.setQuantity(productEntity.getQuantity() + productToCancel.getQuantity());
-        productRepository.save(productEntity);
+    @Transactional
+    public boolean cancelReservation(Product productToCancel, UUID orderId) {
+        var reservationOptional = productReservationRepository.findById(orderId);
+        if (reservationOptional.isEmpty() || reservationOptional.get().isCancelled()) {
+            return false;
+        }
+
+        ProductReservationEntity reservation = reservationOptional.get();
+        productRepository.increaseQuantity(reservation.getProductId(), reservation.getQuantity());
+        reservation.setCancelled(true);
+        productReservationRepository.save(reservation);
+        return true;
     }
 
     @Override
@@ -58,5 +94,16 @@ public class ProductServiceImpl implements ProductService {
         return productRepository.findAll().stream()
                 .map(entity -> new Product(entity.getId(), entity.getName(), entity.getPrice(), entity.getQuantity()))
                 .collect(Collectors.toList());
+    }
+
+    private Product toReservedProduct(ProductReservationEntity reservation) {
+        ProductEntity productEntity = productRepository.findById(reservation.getProductId())
+                .orElseThrow(() -> new NoSuchElementException("Product not found: " + reservation.getProductId()));
+        return new Product(
+                reservation.getProductId(),
+                productEntity.getName(),
+                reservation.getPrice(),
+                reservation.getQuantity()
+        );
     }
 }

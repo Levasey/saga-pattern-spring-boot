@@ -4,7 +4,6 @@ import io.github.levasey.saga.core.dto.command.*;
 import io.github.levasey.saga.core.dto.event.*;
 import io.github.levasey.saga.core.types.OrderStatus;
 import io.github.levasey.saga.orders.service.OrderHistoryService;
-import io.github.levasey.saga.orders.service.OrderService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.annotation.KafkaHandler;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -23,7 +22,6 @@ public class OrderSaga {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final String productsCommandsTopicName;
     private final OrderHistoryService orderHistoryService;
-    private final OrderService orderService;
     private final String paymentsCommandsTopicName;
     private final String ordersCommandsTopicName;
 
@@ -31,14 +29,12 @@ public class OrderSaga {
                      @Value("${products.commands.topic.name}") String productsCommandsTopicName,
                      @Value("${payments.commands.topic.name}") String paymentsCommandsTopicName,
                      @Value("${orders.commands.topic.name}") String ordersCommandsTopicName,
-                     OrderHistoryService orderHistoryService,
-                     OrderService orderService) {
+                     OrderHistoryService orderHistoryService) {
         this.kafkaTemplate = kafkaTemplate;
         this.productsCommandsTopicName = productsCommandsTopicName;
         this.paymentsCommandsTopicName = paymentsCommandsTopicName;
         this.ordersCommandsTopicName = ordersCommandsTopicName;
         this.orderHistoryService = orderHistoryService;
-        this.orderService = orderService;
     }
 
     @KafkaHandler
@@ -82,6 +78,12 @@ public class OrderSaga {
     }
 
     @KafkaHandler
+    public void handleEvent(@Payload ProductReservationFailedEvent event) {
+        RejectOrderCommand rejectOrderCommand = new RejectOrderCommand(event.getOrderId());
+        kafkaTemplate.send(ordersCommandsTopicName, event.getOrderId().toString(), rejectOrderCommand);
+    }
+
+    @KafkaHandler
     public void handleEvent(@Payload OrderApprovedEvent event) {
         orderHistoryService.add(event.getOrderId(), OrderStatus.APPROVED);
     }
@@ -90,7 +92,5 @@ public class OrderSaga {
     public void handleEvent(@Payload ProductReservationCancelledEvent event) {
         RejectOrderCommand rejectOrderCommand = new RejectOrderCommand(event.getOrderId());
         kafkaTemplate.send(ordersCommandsTopicName, event.getOrderId().toString(), rejectOrderCommand);
-
-        orderHistoryService.add(event.getOrderId(), OrderStatus.REJECTED);
     }
 }

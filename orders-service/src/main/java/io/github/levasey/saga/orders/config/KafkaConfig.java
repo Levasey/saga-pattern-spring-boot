@@ -22,8 +22,8 @@ public class KafkaConfig {
     @Value("${orders.commands.topic.name}")
     private String ordersCommandsTopicName;
 
-    private final static Integer TOPIC_REPLICATION_FACTION = 3;
-    private final static Integer TOPIC_PARTITION = 3;
+    private static final Integer TOPIC_REPLICATION_FACTOR = 3;
+    private static final Integer TOPIC_PARTITION = 3;
 
     @Bean
     KafkaTemplate<String, Object> kafkaTemplate(ProducerFactory<String, Object> producerFactory) {
@@ -34,7 +34,7 @@ public class KafkaConfig {
     NewTopic createOrdersEventsTopic() {
         return TopicBuilder.name(ordersEventTopicName)
                 .partitions(TOPIC_PARTITION)
-                .replicas(TOPIC_REPLICATION_FACTION)
+                .replicas(TOPIC_REPLICATION_FACTOR)
                 .build();
     }
 
@@ -42,7 +42,7 @@ public class KafkaConfig {
     NewTopic createProductsCommandsTopic() {
         return TopicBuilder.name(productsCommandsTopicName)
                 .partitions(TOPIC_PARTITION)
-                .replicas(TOPIC_REPLICATION_FACTION)
+                .replicas(TOPIC_REPLICATION_FACTOR)
                 .build();
     }
 
@@ -50,7 +50,7 @@ public class KafkaConfig {
     NewTopic createPaymentsCommandsTopic() {
         return TopicBuilder.name(paymentsCommandsTopicName)
                 .partitions(TOPIC_PARTITION)
-                .replicas(TOPIC_REPLICATION_FACTION)
+                .replicas(TOPIC_REPLICATION_FACTOR)
                 .build();
     }
 
@@ -58,7 +58,7 @@ public class KafkaConfig {
     NewTopic createOrdersCommandsTopic() {
         return TopicBuilder.name(ordersCommandsTopicName)
                 .partitions(TOPIC_PARTITION)
-                .replicas(TOPIC_REPLICATION_FACTION)
+                .replicas(TOPIC_REPLICATION_FACTOR)
                 .build();
     }
 }
